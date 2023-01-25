@@ -6,29 +6,54 @@
 
 ;; definition of structures for NUMEX programs
 
-;; CHANGE add the missing ones
+;; Constants and Variables
+(struct var     (string) #:transparent)  ;; a variable, e.g., (var "foo")
+(struct num     (int)    #:transparent)  ;; a constant number, e.g., (num 17)
+(struct bool    (bool)   #:transparent)  ;; a constant boolean, e.g., (bool true)
 
-(struct var  (string) #:transparent)  ;; a variable, e.g., (var "foo")
-(struct num  (int)    #:transparent)  ;; a constant number, e.g., (num 17)
-(struct plus  (e1 e2)  #:transparent)  ;; add two expressions
+;; num Constant Operations
+(struct plus    (e1 e2)  #:transparent)  ;; add two expressions
+(struct minus   (e1 e2)  #:transparent)  ;; subtract two expression
+(struct mult    (e1 e2)  #:transparent)  ;; multiply two expression
+(struct div     (e1 e2)  #:transparent)  ;; divide two expression
 
+;; bool Constant Operations
+(struct neg     (e1)     #:transparent)  ;; negation of an expression
+(struct andalso (e1 e2)  #:transparent)  ;; logical and of two expression
+(struct orelse  (e1 e2)  #:transparent)  ;; logical or of two expression
 
+;; Condition
+(struct cnd (e1 e2 e3) #:transparent) ;; result is e2 if e1 is true else the result is e3
+(struct iseq (e1 e2)   #:transparent) ;; check equality of two expression
+(struct ifnzero (e1 e2 e3) #:transparent) ;; result is e2 if e1 is not zero else the result is e3
+(struct ifleq (e1 e2 e3 e4) #:transparent) ;; result is e3 if e1 be less that or equeal e2 else the result is e4
+
+;; Lambda Functions and Applications
 (struct lam  (nameopt formal body) #:transparent) ;; a recursive(?) 1-argument function
 (struct tlam  (nameopt formal arg-type body) #:transparent) ;; a typed argument, recursive(?) 1-argument function
 (struct apply (funexp actual)       #:transparent) ;; function application
 
+;; With Environment
+(struct with (s e1 e2) #:transparent)  ;; a let expression where the value of e1 is bound to s in e2
 
+;; Declare NUMEX Nullity
 (struct munit   ()      #:transparent) ;; unit value -- good for ending a list
 (struct ismunit (e)     #:transparent) ;; if e1 is unit then true else false
+
+;; pairs
+(struct apair (e1 e2) #:transparent) ;; NUMEX pair of e1 and e2
+(struct 1st (e1) #:transparent) ;; first element of a NUMEX pair
+(struct 2nd (e1) #:transparent) ;; second element of a NUMEX pair
 
 ;; a closure is not in "source" programs; it is what functions evaluate to
 (struct closure (env f) #:transparent) 
 
-
+;; Keys and Records
 (struct key  (s e) #:transparent) ;; key holds corresponding value of s which is e
 (struct record (k r) #:transparent) ;; record holds several keys
 (struct value (s r) #:transparent) ;; value returns corresponding value of s in r
 
+;; Recursive definition
 (struct letrec (s1 e1 s2 e2 e3) #:transparent) ;; a letrec expression for recursive definitions
 
 ;; Type structures
@@ -38,8 +63,12 @@
 
 ;; Problem 1
 
-(define (racketlist->numexlist xs) "CHANGE")
-(define (numexlist->racketlist xs) "CHANGE")
+(define (racketlist->numexlist xs) (cond
+                                     ((null? xs) (munit))
+                                     ((pair? xs) (apair (car xs) (racketlist->numexlist (cdr xs))))))
+(define (numexlist->racketlist xs) (cond
+                                     ((ismunit xs) '())
+                                     ((apair? xs) (cons (1st xs) (numexlist->racketlist (2nd xs))))))
 
 ;; Problem 2
 
@@ -47,7 +76,10 @@
 ;; Complete this function
 (define (envlookup env str)
   (cond [(null? env) (error "unbound variable during evaluation" str)]
-  		"CHANGE" 
+  	[(list? env) (cond
+                       ((eq? (caar env) str) (cdar env))
+                       (#t (envlookup (cdr env) str)))]
+        [#t (error "TypeValidationError: invalid argument type" env)]
 		)
  )
 
