@@ -180,7 +180,7 @@
               (bool (eq? (num-int v1) (num-int v2))))
              ((and (bool? v1) (bool? v2))
               (bool (eq? (bool-bool v1) (bool-bool v2))))
-             (#t (bool #f))))]
+             (#t (error "type conflict between operands"))))]
 
         [(ifnzero? e)
          (let ([v1 (eval-under-env (ifnzero-e1 e) env)])
@@ -516,7 +516,8 @@
 
 ;; Problem 6
 
-(define type-error-but-evaluates-ok "CHANGE")
+(define type-error-but-evaluates-ok (cnd (bool #t) (bool #t) (num 1)))
+(define type-error-but-evaluates-ok-1 (ismunit (bool #t)))
 (define type-ok-but-evaluates-error "CHANGE")
 
 ;; Challenge Problem
