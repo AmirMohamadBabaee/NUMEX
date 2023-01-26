@@ -483,19 +483,36 @@
 
 ;; Problem 4
 
-(define (ifmunit e1 e2 e3) "CHANGE")
+(define (ifmunit e1 e2 e3)
+  (cnd (ismunit e1) e2 e3))
 
-(define (with* bs e2) "CHANGE")
+(define (with* bs e2)
+  (if (null? bs)
+      e2
+      (with (caar bs) (cdar bs) (with* (cdr bs) e2))))
 
-(define (ifneq e1 e2 e3 e4) "CHANGE")
+(define (ifneq e1 e2 e3 e4)
+  (cnd (neg (iseq e1 e2)) e3 e4))
 
 ;; Problem 5
 
-(define numex-filter "CHANGE")
+(define numex-filter
+  (lam null "func"
+       (lam "internal" "list"
+            (cnd (ismunit (var "list"))
+                 (munit)
+                 (ifnzero (apply (var "func") (1st (var "list")))
+                          (apair (apply (var "func") (1st (var "list"))) (apply (var "internal") (2nd (var "list"))))
+                          ((apply (var "internal") (2nd (var "list")))))))))
 
 (define numex-all-gt
   (with "filter" numex-filter
-        "CHANGE (notice filter is now in NUMEX scope)"))
+        (lam "predicate" "i"
+             (apply filter (lam "gt" "value"
+                                (ifleq (var "i")
+                                       (var "value")
+                                       (var "value")
+                                       (num 0)))))))
 
 ;; Problem 6
 
