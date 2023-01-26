@@ -65,23 +65,24 @@
 
 (define (racketlist->numexlist xs) (cond
                                      ((null? xs) (munit))
-                                     ((pair? xs) (apair (car xs) (racketlist->numexlist (cdr xs))))))
+                                     ((list? xs) (apair (car xs) (racketlist->numexlist (cdr xs))))
+                                     (#t (error "invalid racketlist"))))
 (define (numexlist->racketlist xs) (cond
-                                     ((ismunit xs) '())
-                                     ((apair? xs) (cons (1st xs) (numexlist->racketlist (2nd xs))))))
+                                     ((munit? xs) (list))
+                                     ((apair? xs) (cons (apair-e1 xs) (numexlist->racketlist (apair-e2 xs))))
+                                     (#t (error "invalid numexlist"))))
 
 ;; Problem 2
 
 ;; lookup a variable in an environment
 ;; Complete this function
+
 (define (envlookup env str)
   (cond [(null? env) (error "unbound variable during evaluation" str)]
   	[(list? env) (cond
                        ((eq? (caar env) str) (cdar env))
                        (#t (envlookup (cdr env) str)))]
-        [#t (error "TypeValidationError: invalid argument type" env)]
-		)
- )
+        [#t (error "TypeValidationError: invalid argument type" env)]))
 
 ;; Complete more cases for other kinds of NUMEX expressions.
 ;; We will test eval-under-env by calling it directly even though
@@ -89,6 +90,22 @@
 (define (eval-under-env e env)
   (cond [(var? e) 
          (envlookup env (var-string e))]
+
+        [(num? e) 
+         (cond
+           ((integer? (num-int e)) e)
+           (#t (error "NUMEX num expects a number")))]
+
+        [(bool? e) 
+         (cond
+           ((boolean? (bool-bool e)) e)
+           (#t (error "NUMEX bool expects a boolean")))]
+
+        [(munit? e)
+         e]
+
+        [(closure? e)
+         e]
         
         ;; num Operations
         
@@ -124,8 +141,9 @@
          (let ([v1 (eval-under-env (div-e1 e) env)]
                [v2 (eval-under-env (div-e2 e) env)])
            (if (and (num? v1)
-                    (num? v2))
-               (num (/ (num-int v1)
+                    (num? v2)
+                    (not (= (num-int v2) 0)))
+               (num (quotient (num-int v1)
                        (num-int v2)))
                (error "NUMEX division applied to non-number")))]
         
@@ -180,6 +198,8 @@
               (bool (eq? (num-int v1) (num-int v2))))
              ((and (bool? v1) (bool? v2))
               (bool (eq? (bool-bool v1) (bool-bool v2))))
+             ((and (or (num? v1) (bool? v1)) (or (num? v2) (bool? v2)))
+              (bool #f))
              (#t (error "type conflict between operands"))))]
 
         [(ifnzero? e)
@@ -209,18 +229,29 @@
          (let ([s1 (eval-under-env (with-s e) env)]
                [v1 (eval-under-env (with-e1 e) env)])
            (cond
-             ((string? s1) (eval-under-env (with-e2 e) (cons (list s1 v1) env)))
+             ((string? s1) (eval-under-env (with-e2 e) (cons (cons s1 v1) env)))
              (#t (error "first argument of NUMEX with must be a string"))))]
+
+;        [(with? e) 
+;         (let ([v1 (eval-under-env (with-e1 e) env)])
+;           (if (string? (with-s e))
+;               (eval-under-env (with-e2 e) (cons (cons (with-s e) v1) env))
+;               (error "NUMEX with applied to non-string")))]
 
         ;; function
 
         [(lam? e)
-         (let ([funcname (eval-under-env (lam-nameopt e) env)]
-               [funcarg (eval-under-env (lam-formal e) env)])
+         (let ([funcname (lam-nameopt e)]
+               [funcarg (lam-formal e)])
            (cond
              ((and (or (null? funcname) (string? funcname)) (string? funcarg))
               (closure env e))
              (#t (error "NUMEX function must have valid name and arugment (string)"))))]
+
+;        [(lam? e)
+;           (if (and (or (string? (lam-nameopt e)) (equal? (lam-nameopt e) null)) (string? (lam-formal e)))
+;               (closure env e)
+;               (error "NUMEX lam applied to non-string"))]
 
         [(tlam? e)
          (let ([funcname (eval-under-env (tlam-nameopt e) env)]
@@ -235,15 +266,25 @@
          (let ([funclsr (eval-under-env (apply-funexp e) env)]
                [funarg (eval-under-env (apply-actual e) env)])
            (cond
+             ((lam? funclsr)
+              (eval-under-env (apply (eval-under-env funclsr env) funarg) env))
              ((closure? funclsr)
-              (let ([funenv (cond
-                              ((null? (lam-nameopt (closure-f funclsr)))
-                               (cons (list (lam-formal (closure-f funclsr)) funarg) env))
-                              (#t
-                               (cons (list (lam-nameopt (closure-f funclsr)) funclsr)
-                                  (cons (list (lam-formal (closure-f funclsr)) funarg) env))))])
-                (eval-under-env (lam-body (closure-f funclsr)) funenv)))
-             (#t (error "bad NUMEX function: ~v" funclsr))))]
+              (cond
+                ((null? (lam-nameopt (closure-f funclsr)))
+                 (eval-under-env (lam-body (closure-f funclsr)) (cons (cons (lam-formal (closure-f funclsr)) funarg) (closure-env funclsr))))
+                (#t
+                 (eval-under-env (lam-body (closure-f funclsr)) (cons (cons (lam-nameopt (closure-f funclsr)) funclsr)
+                       (cons (cons (lam-formal (closure-f funclsr)) funarg) (closure-env funclsr)))))))
+             (#t (error "bad NUMEX function:" funclsr))))]
+
+;        [(apply? e) 
+;         (let ([v1 (eval-under-env (apply-funexp e) env)])
+;           (if (closure? v1)
+;               (cond ((equal? null (lam-nameopt (closure-f v1)))
+;                      (eval-under-env (lam-body (closure-f v1)) (cons (cons (lam-formal (closure-f v1)) (eval-under-env (apply-actual e) env))  (closure-env v1))) )
+;                     (#t (eval-under-env (lam-body (closure-f v1)) (cons (cons (lam-nameopt (closure-f v1)) v1)(cons (cons (lam-formal (closure-f v1)) (eval-under-env (apply-actual e) env))  (closure-env v1))))))
+;               (cond ((lam? v1) (eval-under-env (apply v1 (apply-actual e)) env))
+;               (#t (error "NUMEX ~v not a function" (apply-funexp e)) ))))]
 
         ;; pair Operations
         
@@ -254,13 +295,13 @@
 
         [(1st? e)
          (let ([v1 (eval-under-env (1st-e1 e) env)])
-           (if (apair v1)
+           (if (apair? v1)
                (apair-e1 v1)
                (error "NUMEX 1st take an `apair`")))]
 
         [(2nd? e)
          (let ([v1 (eval-under-env (2nd-e1 e) env)])
-           (if (apair v1)
+           (if (apair? v1)
                (apair-e2 v1)
                (error "NUMEX 2nd take an `apair`")))]
 
@@ -274,20 +315,31 @@
 
         ;; letrec Operations
 
+;        [(letrec? e)
+;         (let ([s1 (letrec-s1 e)]
+;               [s2 (letrec-s2 e)]
+;               [s3 (letrec-s3 e)]
+;               [s4 (letrec-s4 e)]
+;               [v1 (letrec-e1 e)]
+;               [v2 (letrec-e2 e)]
+;               [v3 (letrec-e3 e)]
+;               [v4 (letrec-e4 e)]
+;               [v5 (letrec-e5 e)])
+;           (cond
+;             ((and (string? s1)
+;                   (string? s2)
+;                   (string? s3)
+;                   (string? s4))
+;              (let ([recenv (cons (cons s1 v1) (cons (cons s2 v2) (cons (cons s3 v3) (cons (cons s4 v4) env))))])
+;                (eval-under-env v5 recenv))))
+;             (#t (error "NUMEX letrec variable name must be string")))]
+
         [(letrec? e)
-         (let ([s1 (eval-under-env (letrec-s1 e) env)]
-               [s2 (eval-under-env (letrec-s2 e) env)]
-               [s3 (eval-under-env (letrec-s3 e) env)]
-               [s4 (eval-under-env (letrec-s4 e) env)]
-               [v1 (eval-under-env (letrec-e1 e) env)]
-               [v2 (eval-under-env (letrec-e2 e) env)]
-               [v3 (eval-under-env (letrec-e3 e) env)]
-               [v4 (eval-under-env (letrec-e4 e) env)])
-           (cond
-             ((and (string? s1) (string? s2) (string? s3) (string? s4))
-              (let ([recenv (cons (list s1 v1) (cons (list s2 v2) (cons (list s3 v3) (cons (list s4 v4) env))))])
-                (eval-under-env (letrec-e5 e) recenv))))
-             (#t (error "NUMEX letrec variable name must be string")))]
+           (cond ((and (string? (letrec-s1 e)) (string? (letrec-s2 e)) (string? (letrec-s3 e)) (string? (letrec-s4 e)))
+                  (eval-under-env (letrec-e5 e) (cons (cons (letrec-s1 e) (letrec-e1 e)) (cons (cons (letrec-s2 e) (letrec-e2 e))
+                                                                                                          (cons (cons (letrec-s3 e) (letrec-e3 e))
+                                                                                                          (cons (cons (letrec-s4 e) (letrec-e4 e)) env))))))   
+               (#t (error "NUMEX letrec applied to non-string")))]
 
         ;; keys and records Operations
 
@@ -295,8 +347,8 @@
          (let ([s1 (eval-under-env (key-s e) env)]
                [v1 (eval-under-env (key-e e) env)])
            (cond
-             ((string? s1) (key s1 v1)))
-             (#t (error "NUMEX key applied to non-string")))]
+             ((string? s1) (key s1 v1))
+             (#t (error "NUMEX key applied to non-string"))))]
 
         [(record? e)
          (let ([k (eval-under-env (record-k e) env)]
@@ -400,7 +452,9 @@
 
         [(neg? e) 
          (let ([t1 (infer-under-env (neg-e1 e) env)])
-           t1)]
+           (cond
+             ((or (eq? t1 "int") (eq? t1 "bool")) t1)
+             (#t (error "NUMEX TYPE ERROR: negation applied to either non-integer or non-boolean"))))]
 
         [(cnd? e) 
          (let ([t1 (infer-under-env (cnd-e1 e) env)]
@@ -421,7 +475,7 @@
         [(with? e)
          (let ([t1 (infer-under-env (with-e1 e) env)])
            (cond
-             ((string? (with-s e)) (infer-under-env (with-e2 e) (cons (list (with-s e) t1) env)))
+             ((string? (with-s e)) (infer-under-env (with-e2 e) (cons (cons (with-s e) t1) env)))
              (#t (error "NUMEX TYPE ERROR: variable name must be string"))))]
 
         [(tlam? e)
@@ -431,8 +485,8 @@
            (cond
              ((and (or (string? funcname) (null? funcname))
                    (or (eq? argtype "int") (eq? argtype "bool") (eq? argtype "null")))
-              (function (tlam-arg-type e) (infer-under-env (tlam-body e) (cons (list (tlam-formal e) (tlam-arg-type e)) env))))
-             (#t (error "NUMEX TYPE ERROR: function is not valid"))))]
+              (function argtype (infer-under-env (tlam-body e) (cons (cons funcarg argtype) env))))
+             (#t (error "NUMEX TYPE ERROR: function is not valid" e))))]
 
         [(apply? e)
          (let ([t1 (infer-under-env (apply-funexp e) env)]
@@ -496,6 +550,20 @@
 
 ;; Problem 5
 
+;(define numex-filter
+;  (lam null "func" (lam "res" "list"
+;                     (cnd (ismunit (var "list")) (munit)
+;                          (ifnzero (apply (var "func") (1st (var "list"))) 
+;                                      (apair (apply (var "func") (1st (var "list"))) (apply (var "res") (2nd (var "list"))))
+;                                     (apply (var "res") (2nd (var "list"))) )
+;                          ) ) ))
+;
+;
+;(define numex-all-gt
+;  (with "filter" numex-filter
+;        (lam null "i" (apply numex-filter (lam "greater" "x" (ifleq (var "x") (var "i") (num 0) (var "x"))) ))
+;        ))
+
 (define numex-filter
   (lam null "func"
        (lam "internal" "list"
@@ -503,16 +571,16 @@
                  (munit)
                  (ifnzero (apply (var "func") (1st (var "list")))
                           (apair (apply (var "func") (1st (var "list"))) (apply (var "internal") (2nd (var "list"))))
-                          ((apply (var "internal") (2nd (var "list")))))))))
+                          (apply (var "internal") (2nd (var "list"))))))))
 
 (define numex-all-gt
   (with "filter" numex-filter
         (lam "predicate" "i"
-             (apply filter (lam "gt" "value"
-                                (ifleq (var "i")
-                                       (var "value")
-                                       (var "value")
-                                       (num 0)))))))
+             (apply (var "filter") (lam "gt" "value"
+                                (ifleq (var "value")
+                                       (var "i")
+                                       (num 0)
+                                       (var "value")))))))
 
 ;; Problem 6
 
