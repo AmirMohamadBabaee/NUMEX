@@ -518,7 +518,7 @@
 
 (define type-error-but-evaluates-ok (cnd (bool #t) (bool #t) (num 1)))
 (define type-error-but-evaluates-ok-1 (ismunit (bool #t)))
-(define type-ok-but-evaluates-error "CHANGE")
+(define type-ok-but-evaluates-error (iseq (tlam null "val" "bool" (andalso (bool #t) (var "val"))) (tlam null "val" "bool" (orelse (bool #f) (var "val")))))
 
 ;; Challenge Problem
 
