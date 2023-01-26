@@ -54,7 +54,7 @@
 (struct value (s r) #:transparent) ;; value returns corresponding value of s in r
 
 ;; Recursive definition
-(struct letrec (s1 e1 s2 e2 e3) #:transparent) ;; a letrec expression for recursive definitions
+(struct letrec (s1 e1 s2 e2 s3 e3 s4 e4 e5) #:transparent) ;; a letrec expression for recursive definitions
 
 ;; Type structures
 ;; Primitive types are: "int", "bool" and "null"
@@ -213,6 +213,116 @@
              (#t (error "first argument of NUMEX with must be a string"))))]
 
         ;; function
+
+        [(lam? e)
+         (let ([funcname (eval-under-env (lam-nameopt e) env)]
+               [funcarg (eval-under-env (lam-formal e) env)])
+           (cond
+             ((and (or (null? funcname) (string? funcname)) (string? funcarg))
+              (closure env e))
+             (#t (error "NUMEX function must have valid name and arugment (string)"))))]
+
+        [(tlam? e)
+         (let ([funcname (eval-under-env (tlam-nameopt e) env)]
+               [funcarg (eval-under-env (tlam-formal e) env)]
+               [argtype (eval-under-env (tlam-arg-type e) env)])
+           (cond
+             ((and (or (null? funcname) (string? funcname)) (string? funcarg) (string? argtype))
+              (closure env e))
+             (#t (error "NUMEX function must have valid name and arugment (string)"))))]
+
+        [(apply? e)
+         (let ([funclsr (eval-under-env (apply-funexp e) env)]
+               [funarg (eval-under-env (apply-actual e) env)])
+           (cond
+             ((closure? funclsr)
+              (let ([funenv (cond
+                              ((null? (lam-nameopt (closure-f funclsr)))
+                               (cons (list (lam-formal (closure-f funclsr)) funarg) env))
+                              (#t
+                               (cons (list (lam-nameopt (closure-f funclsr)) funclsr)
+                                  (cons (list (lam-formal (closure-f funclsr)) funarg) env))))])
+                (eval-under-env (lam-body (closure-f funclsr)) funenv)))
+             (#t (error "bad NUMEX function: ~v" funclsr))))]
+
+        ;; pair Operations
+        
+        [(apair? e)
+         (let ([v1 (eval-under-env (apair-e1 e) env)]
+               [v2 (eval-under-env (apair-e2 e) env)])
+           (apair v1 v2))]
+
+        [(1st? e)
+         (let ([v1 (eval-under-env (1st-e1 e) env)])
+           (if (apair v1)
+               (apair-e1 v1)
+               (error "NUMEX 1st take an `apair`")))]
+
+        [(2nd? e)
+         (let ([v1 (eval-under-env (2nd-e1 e) env)])
+           (if (apair v1)
+               (apair-e2 v1)
+               (error "NUMEX 2nd take an `apair`")))]
+
+        ;; munit Operations
+
+        [(ismunit? e)
+         (let ([v1 (eval-under-env (ismunit-e e) env)])
+           (if (munit? v1)
+               (bool #t)
+               (bool #f)))]
+
+        ;; letrec Operations
+
+        [(letrec? e)
+         (let ([s1 (eval-under-env (letrec-s1 e) env)]
+               [s2 (eval-under-env (letrec-s2 e) env)]
+               [s3 (eval-under-env (letrec-s3 e) env)]
+               [s4 (eval-under-env (letrec-s4 e) env)]
+               [v1 (eval-under-env (letrec-e1 e) env)]
+               [v2 (eval-under-env (letrec-e2 e) env)]
+               [v3 (eval-under-env (letrec-e3 e) env)]
+               [v4 (eval-under-env (letrec-e4 e) env)])
+           (cond
+             ((and (string? s1) (string? s2) (string? s3) (string? s4))
+              (let ([recenv (cons (list s1 v1) (cons (list s2 v2) (cons (list s3 v3) (cons (list s4 v4) env))))])
+                (eval-under-env (letrec-e5 e) recenv))))
+             (#t (error "NUMEX letrec variable name must be string")))]
+
+        ;; keys and records Operations
+
+        [(key? e)
+         (let ([s1 (eval-under-env (key-s e) env)]
+               [v1 (eval-under-env (key-e e) env)])
+           (cond
+             ((string? s1) (key s1 v1)))
+             (#t (error "NUMEX key applied to non-string")))]
+
+        [(record? e)
+         (let ([k (eval-under-env (record-k e) env)]
+               [r (eval-under-env (record-r e) env)])
+           (cond
+             ((key? k)
+              (cond
+                ((or (munit? r) (record? r)) (record k r))
+                (#t (error "second argument of NUMEX record must be either munit or record"))))
+             (#t (error "first argument of NUMEX record must be a key"))))]
+
+        [(value? e)
+         (let ([s (eval-under-env (value-s e) env)]
+               [r (eval-under-env (value-r e) env)])
+           (cond
+             ((string? s)
+              (cond
+                ((record? r)
+                 (let ([k (record-k r)]
+                       [newr (record-r r)])
+                   (if (eq? (key-s k) s)
+                       (key-e k)
+                       (eval-under-env (value s newr) env))))
+                ((munit? r) r)
+                (#t (error "second argument of NUMEX value must be either a valid record or a munit"))))
+             (#t (error "first argument of NUMEX record must be a string"))))]
         
         [(string? e) e]
         [#t (error (format "bad NUMEX expression: ~v" e))]))
@@ -236,6 +346,30 @@
                "int"
                (error "NUMEX TYPE ERROR: addition applied to non-integer")))]
 
+        [(minus? e) 
+         (let ([t1 (infer-under-env (minus-e1 e) env)]
+               [t2 (infer-under-env (minus-e2 e) env)])
+           (if (and (equal? "int" t1)
+                    (equal? "int" t2))
+               "int"
+               (error "NUMEX TYPE ERROR: subtraction applied to non-integer")))]
+
+        [(mult? e) 
+         (let ([t1 (infer-under-env (mult-e1 e) env)]
+               [t2 (infer-under-env (mult-e2 e) env)])
+           (if (and (equal? "int" t1)
+                    (equal? "int" t2))
+               "int"
+               (error "NUMEX TYPE ERROR: multiplication applied to non-integer")))]
+
+        [(div? e) 
+         (let ([t1 (infer-under-env (div-e1 e) env)]
+               [t2 (infer-under-env (div-e2 e) env)])
+           (if (and (equal? "int" t1)
+                    (equal? "int" t2))
+               "int"
+               (error "NUMEX TYPE ERROR: division applied to non-integer")))]
+
         [(num? e)
          (cond
            [(integer? (num-int e)) "int"]
@@ -243,10 +377,103 @@
 
         [(bool? e)
          (cond
-           [(boolean? (bool-b e)) "bool"]
+           [(boolean? (bool-bool e)) "bool"]
            [#t (error "NUMEX TYPE ERROR: bool should be #t or #f")])]
 
         ;; CHANGE add more cases here
+
+        [(andalso? e) 
+         (let ([t1 (infer-under-env (andalso-e1 e) env)]
+               [t2 (infer-under-env (andalso-e2 e) env)])
+           (if (and (equal? "bool" t1)
+                    (equal? "bool" t2))
+               "bool"
+               (error "NUMEX TYPE ERROR: logical and applied to non-boolean")))]
+
+        [(orelse? e) 
+         (let ([t1 (infer-under-env (orelse-e1 e) env)]
+               [t2 (infer-under-env (orelse-e2 e) env)])
+           (if (and (equal? "bool" t1)
+                    (equal? "bool" t2))
+               "bool"
+               (error "NUMEX TYPE ERROR: logical or applied to non-boolean")))]
+
+        [(neg? e) 
+         (let ([t1 (infer-under-env (neg-e1 e) env)])
+           t1)]
+
+        [(cnd? e) 
+         (let ([t1 (infer-under-env (cnd-e1 e) env)]
+               [t2 (infer-under-env (cnd-e2 e) env)]
+               [t3 (infer-under-env (cnd-e3 e) env)])
+           (if (and (equal? "bool" t1)
+                    (equal? t2 t3))
+               t2
+               (error "NUMEX TYPE ERROR: bad condition")))]
+
+        [(iseq? e) 
+         (let ([t1 (infer-under-env (iseq-e1 e) env)]
+               [t2 (infer-under-env (iseq-e2 e) env)])
+           (if (equal? t1 t2)
+               "bool"
+               (error "NUMEX TYPE ERROR: equality operands does not have same type")))]
+
+        [(with? e)
+         (let ([t1 (infer-under-env (with-e1 e) env)])
+           (cond
+             ((string? (with-s e)) (infer-under-env (with-e2 e) (cons (list (with-s e) t1) env)))
+             (#t (error "NUMEX TYPE ERROR: variable name must be string"))))]
+
+        [(tlam? e)
+         (let ([funcname (tlam-nameopt e)]
+               [funcarg (tlam-formal e)]
+               [argtype (tlam-arg-type e)])
+           (cond
+             ((and (or (string? funcname) (null? funcname))
+                   (or (eq? argtype "int") (eq? argtype "bool") (eq? argtype "null")))
+              (function (tlam-arg-type e) (infer-under-env (tlam-body e) (cons (list (tlam-formal e) (tlam-arg-type e)) env))))
+             (#t (error "NUMEX TYPE ERROR: function is not valid"))))]
+
+        [(apply? e)
+         (let ([t1 (infer-under-env (apply-funexp e) env)]
+               [t2 (infer-under-env (apply-actual e) env)])
+           (cond
+             ((function? t1) (cond
+                               ((eq? (function-input-type t1) t2) (function-output-type t1))
+                               (#t (error "NUMEX TYPE ERROR: type conflict between function input type and argument type"))))
+             (#t (error "NUMEX TYPE ERROR: first argument of NUMEX apply must be a function"))))]
+
+        [(apair? e)
+         (let ([t1 (infer-under-env (apair-e1 e) env)]
+               [t2 (infer-under-env (apair-e2 e) env)])
+           (cond
+             ((collection? t2) (cond
+                                 ((eq? (collection-type t2) t1) t2)
+                                 (#t (error "NUMEX TYPE ERROR: type conflict between arguments"))))
+             ((eq? t2 "null") (collection t1))
+             (#t (error "NUMEX TYPE ERROR: second argument invalid type"))))]
+
+        [(1st? e)
+         (let ([t1 (infer-under-env (1st-e1 e) env)])
+           (cond
+             ((collection? t1) (collection-type t1))
+             (#t (error "NUMEX TYPE ERROR: 1st take only apair"))))]
+
+        [(2nd? e)
+         (let ([t1 (infer-under-env (2nd-e1 e) env)])
+           (cond
+             ((collection? t1) t1)
+             (#t (error "NUMEX TYPE ERROR: 2nd take only apair"))))]
+
+        [(munit? e)
+         "null"]
+
+        [(ismunit? e)
+         (let ([t1 (infer-under-env (ismunit-e e) env)])
+           (cond
+             ((or (collection? t1) (eq? t1 "null")) "bool")
+             (#t (error "NUMEX TYPE ERROR: invalid input type"))))]
+        
         [(string? e) e]
         [#t (error (format "bad NUMEX expression: ~v" e))]))
 
