@@ -117,6 +117,7 @@
                (num (+ (num-int v1) 
                        (num-int v2)))
                (error "NUMEX addition applied to non-number")))]
+        
         ;; CHANGE add more cases here
         
         [(minus? e)
@@ -232,12 +233,6 @@
              ((string? s1) (eval-under-env (with-e2 e) (cons (cons s1 v1) env)))
              (#t (error "first argument of NUMEX with must be a string"))))]
 
-;        [(with? e) 
-;         (let ([v1 (eval-under-env (with-e1 e) env)])
-;           (if (string? (with-s e))
-;               (eval-under-env (with-e2 e) (cons (cons (with-s e) v1) env))
-;               (error "NUMEX with applied to non-string")))]
-
         ;; function
 
         [(lam? e)
@@ -247,11 +242,6 @@
              ((and (or (null? funcname) (string? funcname)) (string? funcarg))
               (closure env e))
              (#t (error "NUMEX function must have valid name and arugment (string)"))))]
-
-;        [(lam? e)
-;           (if (and (or (string? (lam-nameopt e)) (equal? (lam-nameopt e) null)) (string? (lam-formal e)))
-;               (closure env e)
-;               (error "NUMEX lam applied to non-string"))]
 
         [(tlam? e)
          (let ([funcname (eval-under-env (tlam-nameopt e) env)]
@@ -276,15 +266,6 @@
                  (eval-under-env (lam-body (closure-f funclsr)) (cons (cons (lam-nameopt (closure-f funclsr)) funclsr)
                        (cons (cons (lam-formal (closure-f funclsr)) funarg) (closure-env funclsr)))))))
              (#t (error "bad NUMEX function:" funclsr))))]
-
-;        [(apply? e) 
-;         (let ([v1 (eval-under-env (apply-funexp e) env)])
-;           (if (closure? v1)
-;               (cond ((equal? null (lam-nameopt (closure-f v1)))
-;                      (eval-under-env (lam-body (closure-f v1)) (cons (cons (lam-formal (closure-f v1)) (eval-under-env (apply-actual e) env))  (closure-env v1))) )
-;                     (#t (eval-under-env (lam-body (closure-f v1)) (cons (cons (lam-nameopt (closure-f v1)) v1)(cons (cons (lam-formal (closure-f v1)) (eval-under-env (apply-actual e) env))  (closure-env v1))))))
-;               (cond ((lam? v1) (eval-under-env (apply v1 (apply-actual e)) env))
-;               (#t (error "NUMEX ~v not a function" (apply-funexp e)) ))))]
 
         ;; pair Operations
         
@@ -315,31 +296,24 @@
 
         ;; letrec Operations
 
-;        [(letrec? e)
-;         (let ([s1 (letrec-s1 e)]
-;               [s2 (letrec-s2 e)]
-;               [s3 (letrec-s3 e)]
-;               [s4 (letrec-s4 e)]
-;               [v1 (letrec-e1 e)]
-;               [v2 (letrec-e2 e)]
-;               [v3 (letrec-e3 e)]
-;               [v4 (letrec-e4 e)]
-;               [v5 (letrec-e5 e)])
-;           (cond
-;             ((and (string? s1)
-;                   (string? s2)
-;                   (string? s3)
-;                   (string? s4))
-;              (let ([recenv (cons (cons s1 v1) (cons (cons s2 v2) (cons (cons s3 v3) (cons (cons s4 v4) env))))])
-;                (eval-under-env v5 recenv))))
-;             (#t (error "NUMEX letrec variable name must be string")))]
-
         [(letrec? e)
-           (cond ((and (string? (letrec-s1 e)) (string? (letrec-s2 e)) (string? (letrec-s3 e)) (string? (letrec-s4 e)))
-                  (eval-under-env (letrec-e5 e) (cons (cons (letrec-s1 e) (letrec-e1 e)) (cons (cons (letrec-s2 e) (letrec-e2 e))
-                                                                                                          (cons (cons (letrec-s3 e) (letrec-e3 e))
-                                                                                                          (cons (cons (letrec-s4 e) (letrec-e4 e)) env))))))   
-               (#t (error "NUMEX letrec applied to non-string")))]
+         (let ([s1 (letrec-s1 e)]
+               [s2 (letrec-s2 e)]
+               [s3 (letrec-s3 e)]
+               [s4 (letrec-s4 e)]
+               [v1 (letrec-e1 e)]
+               [v2 (letrec-e2 e)]
+               [v3 (letrec-e3 e)]
+               [v4 (letrec-e4 e)]
+               [v5 (letrec-e5 e)])
+           (cond
+             ((and (string? s1)
+                   (string? s2)
+                   (string? s3)
+                   (string? s4))
+              (let ([recenv (cons (cons s1 v1) (cons (cons s2 v2) (cons (cons s3 v3) (cons (cons s4 v4) env))))])
+                (eval-under-env v5 recenv)))
+             (#t (error "NUMEX letrec variable name must be string"))))]
 
         ;; keys and records Operations
 
@@ -549,20 +523,6 @@
   (cnd (neg (iseq e1 e2)) e3 e4))
 
 ;; Problem 5
-
-;(define numex-filter
-;  (lam null "func" (lam "res" "list"
-;                     (cnd (ismunit (var "list")) (munit)
-;                          (ifnzero (apply (var "func") (1st (var "list"))) 
-;                                      (apair (apply (var "func") (1st (var "list"))) (apply (var "res") (2nd (var "list"))))
-;                                     (apply (var "res") (2nd (var "list"))) )
-;                          ) ) ))
-;
-;
-;(define numex-all-gt
-;  (with "filter" numex-filter
-;        (lam null "i" (apply numex-filter (lam "greater" "x" (ifleq (var "x") (var "i") (num 0) (var "x"))) ))
-;        ))
 
 (define numex-filter
   (lam null "func"
