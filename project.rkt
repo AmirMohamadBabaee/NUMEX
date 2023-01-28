@@ -563,3 +563,10 @@
 ;; Do NOT change this
 (define (eval-exp-c e)
   (eval-under-env-c (compute-free-vars e) null))
+
+;; NUMEX Fibonacci Series Generator Implementation
+(define fibb
+  (lam "fibb" "n"
+       (cnd (orelse (iseq (var "n") (num 0)) (iseq (var "n") (num 1)))
+            (num 1)
+            (plus (apply (var "fibb") (minus (var "n") (num 1))) (apply (var "fibb") (minus (var "n") (num 2)))))))
